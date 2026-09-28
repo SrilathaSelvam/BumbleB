@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Insight — Real-Time Log Anomaly Detector</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- TOP APP BAR -->
+  <header class="top-bar" id="top-bar">
+    <div class="brand-group">
+      <div class="brand-icon-wrapper">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          <circle cx="12" cy="12" r="3" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">Insight</span>
+        <span class="brand-sub">Log Anomaly Detector</span>
+      </div>
+    </div>
+
+    <!-- Status Pills -->
+    <div class="status-pills-cluster">
+      <!-- Connection Pill -->
+      <div class="pill connection-pill pill-disconnected" id="connection-pill" title="WebSocket connection status">
+        <span class="pill-dot"></span>
+        <span class="pill-label" id="connection-label">Disconnected</span>
+      </div>
+
+      <!-- Warm-up Pill -->
+      <div class="pill warmup-pill pill-active" id="warmup-pill" title="Detector baseline estimation">
+        <span class="warmup-spinner" id="warmup-spinner"></span>
+        <span class="pill-label" id="warmup-label">Learning baseline... (45s)</span>
+      </div>
+
+      <!-- Overall Status Pill -->
+      <div class="pill overall-pill pill-normal" id="overall-status-pill" title="Overall system state derived from recent anomalies">
+        <span class="pill-icon" id="overall-status-icon">●</span>
+        <span class="pill-label" id="overall-status-label">Normal</span>
+      </div>
+
+      <!-- Freshness / Stale Indicator -->
+      <div class="freshness-indicator" id="freshness-indicator" title="Metric stream latency">
+        <span class="freshness-dot"></span>
+        <span class="freshness-text" id="freshness-text">Waiting for data...</span>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="top-actions">
+      <!-- Demo Controls Trigger -->
+      <button class="top-btn" id="demo-controls-toggle" title="Toggle Demo Scenarios Control Panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        <span>Demo Controls</span>
+      </button>
+
+      <!-- Audio Alert Mute/Unmute -->
+      <button class="top-icon-btn" id="sound-toggle" title="Toggle Audio Chime on CRITICAL anomalies (default off)" aria-label="Toggle Sound">
+        <svg id="sound-icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+          <line x1="23" y1="9" x2="17" y2="15"/>
+          <line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+        <svg id="sound-icon-active" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        </svg>
+      </button>
+
+      <!-- Unread Alerts Bell -->
+      <button class="top-icon-btn" id="bell-btn" title="Jump to alert feed" aria-label="Unread Alerts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="bell-badge hidden" id="bell-badge">0</span>
+      </button>
+
+      <!-- Dark / Light Theme Toggle -->
+      <button class="top-icon-btn" id="theme-toggle" title="Toggle Dark/Light Theme" aria-label="Toggle Theme">
+        <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <svg id="theme-icon-light" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ACTIVE ALERT BANNER (Shown only when alert is active) -->
+  <section class="alert-banner hidden" id="alert-banner" role="alert">
+    <div class="banner-content">
+      <div class="banner-icon-badge" id="banner-icon-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="banner-svg">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="banner-text-wrap">
+        <strong id="banner-headline">Anomalies Detected</strong>
+        <span id="banner-subtext">Rolling error rate breached detector limits.</span>
+      </div>
+    </div>
+    <div class="banner-actions">
+      <button class="banner-action-btn" id="banner-view-btn">View Alerts</button>
+      <button class="banner-close-btn" id="banner-dismiss-btn" title="Dismiss banner until next alert" aria-label="Dismiss">✕</button>
+    </div>
+  </section>
+
+  <!-- DEMO CONTROLS DRAWER (Collapsible, hidden via ?controls=0) -->
+  <section class="demo-controls-panel hidden" id="demo-controls-panel">
+    <div class="demo-panel-header">
+      <div class="demo-panel-title">
+        <span class="badge-tag">HACKATHON DEMO</span>
+        <h3>Fault Injection & Scenario Controls</h3>
+      </div>
+      <button class="demo-close-btn" id="demo-close-btn" title="Close Panel">✕</button>
+    </div>
+    <div class="demo-panel-body">
+      <p class="demo-desc">Inject simulated traffic patterns to test the rolling EWMA baseline, z-score thresholding, and AWS CloudWatch/SNS delivery state transitions.</p>
+      <div class="demo-btn-grid">
+        <button class="demo-action-btn btn-scenario" data-scenario="blip" id="btn-inject-blip">
+          <span class="btn-scenario-title">1. Inject Blip</span>
+          <span class="btn-scenario-sub">Short spike (no alert, stays inside guard)</span>
+        </button>
+
+        <button class="demo-action-btn btn-scenario" data-scenario="ramp" id="btn-inject-ramp">
+          <span class="btn-scenario-title">2. Inject Ramp</span>
+          <span class="btn-scenario-sub">Escalates: WARNING &rarr; HIGH &rarr; CRITICAL</span>
+        </button>
+
+        <button class="demo-action-btn btn-scenario" data-scenario="sustained" id="btn-inject-sustained">
+          <span class="btn-scenario-title">3. Inject Sustained</span>
+          <span class="btn-scenario-sub">Persistent severe outage anomaly</span>
+        </button>
+
+        <button class="demo-action-btn btn-reset" id="btn-inject-reset">
+          <span class="btn-scenario-title">Reset Detector</span>
+          <span class="btn-scenario-sub">Clear scenarios and return to calm</span>
+        </button>
+      </div>
+      <div class="demo-feedback-area hidden" id="demo-feedback-area">
+        <span class="demo-feedback-icon" id="demo-feedback-icon"></span>
+        <span class="demo-feedback-text" id="demo-feedback-text"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <main class="dashboard-container">
+
+    <!-- STAT CARDS ROW -->
+    <section class="stats-row" aria-label="Key Detector Metrics">
+      <!-- Stat 1: Current Error Rate -->
+      <div class="stat-card" id="card-current-rate">
+        <div class="stat-header">
+          <span class="stat-label">CURRENT ERROR RATE</span>
+          <span class="stat-badge" id="rate-trend-badge">60s Window</span>
+        </div>
+        <div class="stat-value-wrap">
+          <span class="stat-value tabular-num" id="stat-error-rate">--%</span>
+        </div>
+        <div class="stat-footer" id="stat-error-rate-footer">
+          <span class="stat-muted">Real-time sliding window</span>
+        </div>
+      </div>
+
+      <!-- Stat 2: Baseline Mean -->
+      <div class="stat-card" id="card-baseline-mean">
+        <div class="stat-header">
+          <span class="stat-label">BASELINE MEAN (EWMA)</span>
+          <span class="stat-indicator normal-tint">Learned</span>
+        </div>
+        <div class="stat-value-wrap">
+          <span class="stat-value tabular-num" id="stat-baseline-mean">--%</span>
+        </div>
+        <div class="stat-footer">
+          <span class="stat-muted" id="stat-baseline-sub">Normal operational mean</span>
+        </div>
+      </div>
+
+      <!-- Stat 3: Upper Band Limit -->
+      <div class="stat-card" id="card-baseline-upper">
+        <div class="stat-header">
+          <span class="stat-label">UPPER BAND (MEAN + k&sigma;)</span>
+          <span class="stat-indicator purple-tint">Guard Threshold</span>
+        </div>
+        <div class="stat-value-wrap">
+          <span class="stat-value tabular-num" id="stat-baseline-upper">--%</span>
+        </div>
+        <div class="stat-footer">
+          <span class="stat-muted" id="stat-upper-sub">Anomaly trip boundary</span>
+        </div>
+      </div>
+
+      <!-- Stat 4: Error Lines / Total Lines -->
+      <div class="stat-card" id="card-line-counts">
+        <div class="stat-header">
+          <span class="stat-label">LOG VOLUME (ERR / TOTAL)</span>
+          <span class="stat-badge">Window Ratio</span>
+        </div>
+        <div class="stat-value-wrap">
+          <span class="stat-value tabular-num" id="stat-window-counts">-- / --</span>
+        </div>
+        <div class="stat-footer">
+          <span class="stat-muted" id="stat-lines-sub">Lines processed in 60s</span>
+        </div>
+      </div>
+
+      <!-- Stat 5: Alerts in Last 10m -->
+      <div class="stat-card" id="card-recent-alerts">
+        <div class="stat-header">
+          <span class="stat-label">ALERTS (LAST 10 MIN)</span>
+          <span class="stat-badge" id="alerts-count-badge">SRE Feed</span>
+        </div>
+        <div class="stat-value-wrap">
+          <span class="stat-value tabular-num" id="stat-alerts-10m">0</span>
+        </div>
+        <div class="stat-footer">
+          <span class="stat-muted" id="stat-alerts-sub">0 critical triggers</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- MIDDLE ROW: HERO CHART (65%) + INCIDENT DETAILS (35%) -->
+    <section class="workspace-grid">
+
+      <!-- LEFT COLUMN: HERO CHART CARD -->
+      <div class="card chart-card">
+        <div class="chart-header">
+          <div class="chart-title-group">
+            <h2 class="chart-title">Error Rate</h2>
+            <span class="chart-subtitle">Live sliding window error rate vs learned baseline band</span>
+          </div>
+
+          <!-- Range segmented control -->
+          <div class="range-control" role="group" aria-label="Chart time range selection">
+            <button class="range-btn" data-range="60" id="range-1m">1m</button>
+            <button class="range-btn active" data-range="300" id="range-5m">5m</button>
+            <button class="range-btn" data-range="900" id="range-15m">15m</button>
+          </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="chart-canvas-container" id="chart-container">
+          <canvas id="insight-canvas"></canvas>
+          <!-- Floating interactive tooltip -->
+          <div class="chart-tooltip hidden" id="chart-tooltip">
+            <div class="tooltip-time" id="tooltip-time">00:00:00</div>
+            <div class="tooltip-rows">
+              <div class="tooltip-row">
+                <span class="dot-indicator dot-rate"></span>
+                <span class="tooltip-label">Error Rate:</span>
+                <span class="tooltip-val tabular-num" id="tooltip-rate">0.0%</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="dot-indicator dot-baseline"></span>
+                <span class="tooltip-label">Baseline Mean:</span>
+                <span class="tooltip-val tabular-num" id="tooltip-baseline">--</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="dot-indicator dot-upper"></span>
+                <span class="tooltip-label">Upper Limit:</span>
+                <span class="tooltip-val tabular-num" id="tooltip-upper">--</span>
+              </div>
+              <div class="tooltip-row tooltip-incident-info hidden" id="tooltip-incident-row">
+                <span class="dot-indicator dot-anomaly" id="tooltip-anomaly-dot"></span>
+                <span class="tooltip-label" id="tooltip-anomaly-label">Anomaly:</span>
+                <span class="tooltip-val tabular-num" id="tooltip-anomaly-val">z=0.0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Latest 2 Incident Rows inside Chart Card (per Section 4.4) -->
+        <div class="chart-incident-rows" id="chart-incident-rows">
+          <div class="incident-row-empty" id="incident-row-empty">
+            <span class="muted-icon">✓</span>
+            <span>No active incidents. System operating within normal baseline boundaries.</span>
+          </div>
+          <!-- Rows will be injected here dynamically -->
+        </div>
+
+        <!-- Chart Card Footer Strip / Legend -->
+        <div class="chart-footer-strip">
+          <div class="legend-group">
+            <div class="legend-item">
+              <span class="legend-swatch swatch-band"></span>
+              <span class="legend-text">Baseline Band (Normal)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-icon icon-warning">▲</span>
+              <span class="legend-text">WARNING (z &ge; 3)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-icon icon-high">⯄</span>
+              <span class="legend-text">HIGH (z &ge; 5)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-icon icon-critical">●</span>
+              <span class="legend-text">CRITICAL (z &ge; 8)</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-swatch swatch-recovery"></span>
+              <span class="legend-text">Recovery Marker</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: INCIDENT DETAILS PANEL (per Section 4.5) -->
+      <aside class="card details-panel" id="incident-details-panel">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <h2 class="panel-title">Incident Details</h2>
+            <span class="panel-subtitle" id="selected-alert-id">No alert selected</span>
+          </div>
+          <div class="panel-header-badge" id="selected-alert-badge">
+            <span class="pill pill-muted" id="selected-severity-pill">Idle</span>
+          </div>
+        </div>
+
+        <!-- Body populated when alert selected -->
+        <div class="panel-body" id="details-panel-body">
+          
+          <!-- Empty State -->
+          <div class="details-empty-state" id="details-empty-state">
+            <div class="empty-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <h4>Select an alert to see details</h4>
+            <p>Click on any table row, recent incident, or chart marker to inspect statistical metrics, sample error logs, and AWS CloudWatch delivery verification.</p>
+          </div>
+
+          <!-- Active Details Content (hidden by default) -->
+          <div class="details-active-content hidden" id="details-active-content">
+            
+            <!-- Z-Score Gauge Bars -->
+            <div class="detail-section">
+              <div class="section-title-wrap">
+                <span class="section-tag">STATISTICAL DEVIATION</span>
+                <h4 class="section-title">Z-Score Threshold Analysis</h4>
+              </div>
+              
+              <div class="z-threshold-bars">
+                <!-- Warning Bar -->
+                <div class="threshold-bar-item" id="bar-item-warning">
+                  <div class="threshold-bar-meta">
+                    <span class="threshold-name"><span class="threshold-icon">▲</span> WARNING threshold (z 3)</span>
+                    <span class="threshold-status tabular-num" id="val-z-warning">0%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill fill-warning" id="fill-z-warning" style="width: 0%"></div>
+                  </div>
+                </div>
+
+                <!-- High Bar -->
+                <div class="threshold-bar-item" id="bar-item-high">
+                  <div class="threshold-bar-meta">
+                    <span class="threshold-name"><span class="threshold-icon">⯄</span> HIGH threshold (z 5)</span>
+                    <span class="threshold-status tabular-num" id="val-z-high">0%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill fill-high" id="fill-z-high" style="width: 0%"></div>
+                  </div>
+                </div>
+
+                <!-- Critical Bar -->
+                <div class="threshold-bar-item" id="bar-item-critical">
+                  <div class="threshold-bar-meta">
+                    <span class="threshold-name"><span class="threshold-icon">●</span> CRITICAL threshold (z 8)</span>
+                    <span class="threshold-status tabular-num" id="val-z-critical">0%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill fill-critical" id="fill-z-critical" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Factual Summary Callout (No AI or invented text) -->
+            <div class="detail-section">
+              <div class="factual-callout" id="factual-summary-callout">
+                <p id="factual-summary-text">
+                  Error rate 14.2% against a baseline of 2.1% (upper band 5.3%), 71 errors in 500 lines over the last 60s.
+                </p>
+              </div>
+            </div>
+
+            <!-- Recent Error Samples -->
+            <div class="detail-section">
+              <div class="samples-header">
+                <div class="section-title-wrap">
+                  <span class="section-tag">LOG CONTEXT</span>
+                  <h4 class="section-title">Recent Error Samples</h4>
+                </div>
+                <button class="copy-btn" id="copy-samples-btn" title="Copy raw error messages to clipboard">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                  <span id="copy-btn-text">Copy</span>
+                </button>
+              </div>
+              <div class="log-samples-box" id="log-samples-box">
+                <pre class="log-samples-pre" id="log-samples-pre">No error samples attached.</pre>
+              </div>
+              <button class="expand-samples-btn hidden" id="expand-samples-btn">Show More</button>
+            </div>
+
+            <!-- AWS Delivery Timeline (Only statuses actually received) -->
+            <div class="detail-section">
+              <div class="section-title-wrap">
+                <span class="section-tag">DELIVERY PIPELINE</span>
+                <h4 class="section-title">AWS CloudWatch / SNS Timeline</h4>
+              </div>
+              
+              <div class="aws-timeline" id="aws-timeline">
+                <!-- Timeline items rendered dynamically -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- BOTTOM ROW: ALERTS TABLE (per Section 4.6) -->
+    <section class="card table-card" id="alerts-table-section">
+      <div class="table-card-header">
+        <div class="table-title-wrap">
+          <h2 class="table-title">Alert Feed</h2>
+          <span class="table-count-badge" id="table-count-badge">0 total</span>
+        </div>
+        <div class="table-header-actions">
+          <span class="table-hint">De-duplicated • Newest first • Live AWS delivery status</span>
+        </div>
+      </div>
+
+      <div class="table-scroll-wrap">
+        <table class="alerts-table" id="alerts-table">
+          <thead>
+            <tr>
+              <th scope="col" style="width: 130px;">Metric</th>
+              <th scope="col">Description</th>
+              <th scope="col" style="width: 140px;">Severity</th>
+              <th scope="col" style="width: 110px;">Time</th>
+              <th scope="col" style="width: 190px;">AWS Status</th>
+              <th scope="col" style="width: 100px;">Z-Score</th>
+              <th scope="col" style="width: 90px; text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-table-body">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+
+        <!-- Table Empty State -->
+        <div class="table-empty-state" id="table-empty-state">
+          <div class="table-empty-icon">✓</div>
+          <div class="table-empty-title">No alerts. System is normal.</div>
+          <div class="table-empty-sub">Any detected anomalies breaching baseline limits will stream here in real time.</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- TOAST NOTIFICATIONS CONTAINER -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <!-- VENDOR & APP SCRIPTS -->
+  <script src="vendor/insight-chart.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
